@@ -41,14 +41,14 @@ cdef double sinc(double x) nogil:
     Sinc function with simple singularity check.
     '''
 
-    if fabs(x) < 1.e-10:
+    if fabs(x) < 1.e-20:
         return 1.
     else:
         return sin(x) / x
 
 
 cdef double gaussian_1d_kernel(
-        double distance, double bearing, double[::1] kernel_params
+        double distance, double bearing, void *kernel_params
         ) nogil:
     '''
     Gaussian-1D kernel function.
@@ -69,11 +69,13 @@ cdef double gaussian_1d_kernel(
     Kernel weight : double
     '''
 
-    return exp(-distance * distance * kernel_params[0])
+    cdef gaussian_1d_params *params = <gaussian_1d_params*> kernel_params
+
+    return exp(-distance * distance * params.inv_variance)
 
 
 cdef double gaussian_2d_kernel(
-        double distance, double bearing, double[::1] kernel_params
+        double distance, double bearing, void *kernel_params
         ) nogil:
     '''
     Gaussian-2D kernel function.
@@ -98,19 +100,20 @@ cdef double gaussian_2d_kernel(
     '''
 
     cdef:
+        gaussian_2d_params *params = <gaussian_2d_params*> kernel_params
         double ellarg, Earg
 
     ellarg = (
-        kernel_params[0] ** 2 * sin(bearing - kernel_params[2]) ** 2 +
-        kernel_params[1] ** 2 * cos(bearing - kernel_params[2]) ** 2
+        params.w_a ** 2 * sin(bearing - params.alpha) ** 2 +
+        params.w_b ** 2 * cos(bearing - params.alpha) ** 2
         )
-    Earg = (distance / kernel_params[0] / kernel_params[1]) ** 2 / 2. * ellarg
+    Earg = (distance / params.w_a / params.w_b) ** 2 / 2. * ellarg
 
     return exp(-Earg)
 
 
 cdef double tapered_sinc_1d_kernel(
-        double distance, double bearing, double[::1] kernel_params
+        double distance, double bearing, void *kernel_params
         ) nogil:
     '''
     Kaiser-Bessel-1D kernel function (Gaussian-tapered sinc).
@@ -140,8 +143,62 @@ cdef double tapered_sinc_1d_kernel(
     '''
 
     cdef:
+        tapered_sinc_1d_params *params = \
+            <tapered_sinc_1d_params*> kernel_params
         double arg
 
-    arg = PI * distance / kernel_params[0]
+    arg = PI * distance / params.sigma
 
-    return sinc(arg / kernel_params[2]) * exp(-(arg / kernel_params[1]) ** 2)
+    return sinc(arg / params.b) * exp(-(arg / params.a) ** 2)
+
+
+cdef double vector_1d_kernel(
+        double distance, double bearing, void *kernel_params
+        ) nogil:
+
+    cdef:
+        vector_1d_params *params = <vector_1d_params*> kernel_params
+        uint32_t index
+
+    index = <uint32_t> (
+        # assume, refval_x is always zero! for speed
+        # (x - refval) / dx + refpix + 0.5
+        distance / params.dx + params.refpix + 0.5
+        )
+
+    if index < 0 or index >= params.n:
+        return 0.
+
+    return params.vector[index]
+
+
+cdef double matrix_2d_kernel(
+        double distance, double bearing, void *kernel_params
+        ) nogil:
+
+    cdef:
+        matrix_2d_params *params = <matrix_2d_params*> kernel_params
+        uint32_t index_x, index_y
+        double x, y
+
+    x = distance * cos(bearing)
+    y = distance * sin(bearing)
+
+    index_x = <uint32_t> (
+        # assume, refval_x is always zero! for speed
+        # (x - refval_x) / dx + refpix_x + 0.5
+        x / params.dx + params.refpix_x + 0.5
+        )
+    index_y = <uint32_t> (
+        # assume, refval_y is always zero! for speed
+        # (y - refval_y) / dy + refpix_y + 0.5
+        y / params.dy + params.refpix_y + 0.5
+        )
+
+    if (
+            index_x < 0 or index_y < 0 or
+            index_x >= params.n_x or index_y >= params.n_y
+            ):
+        return 0.
+
+    return params.matrix[index_y, index_x]

@@ -93,7 +93,11 @@ __all__ = ['WcsGrid', 'SlGrid']
 
 
 from .kernels cimport (
-    gaussian_1d_kernel, gaussian_2d_kernel, tapered_sinc_1d_kernel
+    gaussian_1d_kernel, gaussian_1d_params,
+    gaussian_2d_kernel, gaussian_2d_params,
+    tapered_sinc_1d_kernel, tapered_sinc_1d_params,
+    vector_1d_kernel, vector_1d_params,
+    matrix_2d_kernel, matrix_2d_params,
     )
 from .hphashtab cimport HpxHashTable
 from .helpers cimport (
@@ -113,7 +117,7 @@ DEF MAX_Y = 2**30
 # define function pointers (1D and 2D), to allow user-chosen kernels
 # double distance, double bearing, double[::1] kernel_params)
 # (use bearing=NULL for 1D kernels)
-ctypedef double (*kernel_func_ptr_t)(double, double, double[::1]) nogil
+ctypedef double (*kernel_func_ptr_t)(double, double, void *kernel_params) nogil
 
 
 # define some helper functions
@@ -181,14 +185,23 @@ cdef class Cygrid(object):
         double disc_size
         double sphere_radius
         double last_sphere_radius, last_hpxmaxres, hpx_resol
-        bint bearing_needed, kernel_set
-        kernel_func_ptr_t kernel_func_ptr
-        np.ndarray kernel_params_arr
+        # np.ndarray kernel_params_arr
 
         # helper lookup tables for faster processing are wrapped in
         #  the HpxHashTable class; see associated docs for more information
         HpxHashTable my_hpx_hashtab
         bint dbg_messages
+
+        bint bearing_needed, kernel_set
+        kernel_func_ptr_t kernel_func_ptr
+        # need to instantiate each kernel type, even if not needed
+        # (cannot dynamically do it)
+        gaussian_1d_params _gaussian_1d_params
+        gaussian_2d_params _gaussian_2d_params
+        tapered_sinc_1d_params _tapered_sinc_1d_params
+        vector_1d_params _vector_1d_params
+        matrix_2d_params _matrix_2d_params
+        void *kernel_params_pointer  # points to correct kernel_params struct
 
     def __init__(self, *args, **kwargs):
         # Constructor will initalize necessary cube/weights arrays, setup cube
@@ -247,7 +260,7 @@ cdef class Cygrid(object):
         kernel_type : string type (python3: unicode, python2: bytes)
             set the kernel type, the following names/types are available:
             'gauss1d', 'gauss2d', 'tapered_sinc' (see Notes for details)
-        kernel_params : array-like (anything that can be casted to numpy.array)
+        kernel_params : tuple
             set the kernel parameters for the chosen type (see Notes for
             details)
         sphere_radius : double
@@ -266,8 +279,7 @@ cdef class Cygrid(object):
             'gauss2d', (kernel_sigma_maj, kernel_sigma_min, PA)
             'tapered_sinc', (kernel_sigma, param_a, param_b)
 
-        Except for PA, param_a and param_b all numbers are in units of degrees.
-        PA (the position angle) is in units of radians (for efficiency).
+        Except for param_a and param_b all numbers are in units of degrees.
         Param_a and Param_b should be 2.52 and 1.55, respectively, for optimal
         results!
 
@@ -282,10 +294,10 @@ cdef class Cygrid(object):
             unicode kernel_description
             # double (*kernel_func_ptr)(double, double, double[::1]) nogil
 
-            np.ndarray kernel_params_arr = np.atleast_1d(
-                kernel_params
-                ).astype(np.float64)
-            double[::1] kparams_v = kernel_params_arr  # test if mem-view works
+            # np.ndarray kernel_params_arr = np.atleast_1d(
+            #     kernel_params
+            #     ).astype(np.float64)
+            # double[::1] kernel_params = kernel_params_arr  # test if mem-view works
 
             int num_params
 
@@ -301,6 +313,14 @@ cdef class Cygrid(object):
                 'tapered_sinc': (
                     '1D tapered-sinc kernel', 3, <bint> False,
                     # ('kernel_sigma', 'param_a', 'param_b')
+                    ),
+                'vector1d': (
+                    '1D vector discrete kernel', 3, <bint> False,
+                    # ('kernel vector', 'refpix', 'dx')
+                    ),
+                'matrix2d': (
+                    '2D matrix discrete kernel', 3, <bint> True,
+                    # ('kernel matrix', ('refpix_x', 'refpix_y), ('dx', 'dy'))
                     ),
                 }
 
@@ -322,21 +342,62 @@ cdef class Cygrid(object):
                 '\n'.join(kernel_types.keys())
                 )
 
-        if kparams_v.shape[0] != num_params:
+        if len(kernel_params) != num_params:
             raise ValueError('kernel_params needs {} entries for {}'.format(
                 num_params, kernel_type_u
                 ))
 
         if kernel_type_u == 'gauss1d':
+
             self.kernel_func_ptr = gaussian_1d_kernel
-            kparams_v[0] = 0.5 / kparams_v[0] ** 2
+            self._gaussian_1d_params.inv_variance = 0.5 / kernel_params[0] ** 2
+            self.kernel_params_pointer = &(self._gaussian_1d_params)
+
         elif kernel_type_u == 'gauss2d':
+
             self.kernel_func_ptr = gaussian_2d_kernel
+            self._gaussian_2d_params.w_a = <double> kernel_params[0]
+            self._gaussian_2d_params.w_b = <double> kernel_params[1]
+            self._gaussian_2d_params.alpha = (
+                (<double> kernel_params[3]) * PI / 180.
+                )
+            self.kernel_params_pointer = &(self._gaussian_2d_params)
+
         elif kernel_type_u == 'tapered_sinc':
+
             self.kernel_func_ptr = tapered_sinc_1d_kernel
+            self._tapered_sinc_1d_params.sigma = <double> kernel_params[0]
+            self._tapered_sinc_1d_params.a = <double> kernel_params[1]
+            self._tapered_sinc_1d_params.b = <double> kernel_params[2]
+            self.kernel_params_pointer = &(self._tapered_sinc_1d_params)
+
+        elif kernel_type_u == 'vector1d':
+
+            self.kernel_func_ptr = vector_1d_kernel
+            self._vector_1d_params.vector = np.ascontiguousarray(
+                kernel_params[0]
+                )
+            self._vector_1d_params.refpix = <double> kernel_params[1]
+            self._vector_1d_params.dx = <double> kernel_params[2]
+            self._vector_1d_params.n = <uint32_t> len(kernel_params[0])
+            self.kernel_params_pointer = &(self._vector_1d_params)
+
+        elif kernel_type_u == 'matrix2d':
+
+            self.kernel_func_ptr = matrix_2d_kernel
+            self._matrix_2d_params.matrix = np.ascontiguousarray(
+                kernel_params[0]
+                )
+            self._matrix_2d_params.refpix_x = <double> kernel_params[1][0]
+            self._matrix_2d_params.refpix_y = <double> kernel_params[1][1]
+            self._matrix_2d_params.dx = <double> kernel_params[2][0]
+            self._matrix_2d_params.dy = <double> kernel_params[2][1]
+            self._matrix_2d_params.n_x = <uint32_t> len(kernel_params[0][0])
+            self._matrix_2d_params.n_y = <uint32_t> len(kernel_params[0])
+            self.kernel_params_pointer = &(self._matrix_2d_params)
 
         self.kernel_set = <bint> True
-        self.kernel_params_arr = kernel_params_arr
+        # self.kernel_params_arr = kernel_params_arr
 
         # recompute hpx lookup table in case kernel sphere has changed
         # if you want to use very different kernels, you should call the grid
@@ -501,7 +562,8 @@ cdef class Cygrid(object):
             double sphere_radius = self.sphere_radius
             bint bearing_needed = self.bearing_needed
             kernel_func_ptr_t kernel_func_ptr = self.kernel_func_ptr
-            double[::1] kernel_params_v = self.kernel_params_arr
+            # double[::1] kernel_params_v = self.kernel_params_arr
+            void *kernel_params_pointer = self.kernel_params_pointer
 
         if self.dbg_messages:
             print('Gridding {} spectra in datacube...'.format(len(data)))
@@ -544,7 +606,7 @@ cdef class Cygrid(object):
                 if sdist < sphere_radius:
                     _goodpix += 1
                     sweight = kernel_func_ptr(
-                        sdist, sbear, kernel_params_v
+                        sdist, sbear, kernel_params_pointer
                         )
                     for z in range(numchans):
                         tweight = weights[in_idx, z] * sweight
