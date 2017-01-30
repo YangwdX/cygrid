@@ -59,10 +59,8 @@ cdef double gaussian_1d_kernel(
         Radial distance/separation
     bearing : double
         unused - this is only in the call signature to allow function pointers
-    kernel_params : double[::1]
-        mem-view on kernel-parameters array
-        must contain:
-        kernel_params[0] : 1. / 2. / sigma_kernel ** 2
+    kernel_params : gaussian_1d_params struct
+        see "kernels.pxd" for description
 
     Returns
     -------
@@ -85,13 +83,9 @@ cdef double gaussian_2d_kernel(
     distance : double
         Radial distance/separation
     bearing : double
-        unused - this is only in the call signature to allow function pointers
-    kernel_params : double[::1]
-        mem-view on kernel-parameters array
-        must contain:
-        kernel_params[0] : w_a
-        kernel_params[1] : w_b
-        kernel_params[2] : alpha
+        Bearing of a position w.r.t. kernel center
+    kernel_params : gaussian_2d_params struct
+        see "kernels.pxd" for description
 
 
     Returns
@@ -124,12 +118,8 @@ cdef double tapered_sinc_1d_kernel(
         Radial distance/separation
     bearing : double
         unused - this is only in the call signature to allow function pointers
-    kernel_params : double[::1]
-        mem-view on kernel-parameters array
-        must contain:
-        kernel_params[0] : sigma_kernel
-        kernel_params[1] : a (should be set to 2.52)
-        kernel_params[2] : b (should be set to 1.55)
+    kernel_params : tapered_sinc_1d_params struct
+        see "kernels.pxd" for description
 
     Returns
     -------
@@ -155,6 +145,22 @@ cdef double tapered_sinc_1d_kernel(
 cdef double vector_1d_kernel(
         double distance, double bearing, void *kernel_params
         ) nogil:
+    '''
+    Radial-vector 1D kernel function.
+
+    Parameters
+    ----------
+    distance : double
+        Radial distance/separation
+    bearing : double
+        unused - this is only in the call signature to allow function pointers
+    kernel_params : vector_1d_params struct
+        see "kernels.pxd" for description
+
+    Returns
+    -------
+    Kernel weight : double
+    '''
 
     cdef:
         vector_1d_params *params = <vector_1d_params*> kernel_params
@@ -175,14 +181,32 @@ cdef double vector_1d_kernel(
 cdef double matrix_2d_kernel(
         double distance, double bearing, void *kernel_params
         ) nogil:
+    '''
+    Matrix-2D kernel function.
+
+    Parameters
+    ----------
+    distance : double
+        Radial distance/separation
+    bearing : double
+        Bearing of a position w.r.t. kernel center
+    kernel_params : matrix_2d_params struct
+        see "kernels.pxd" for description
+
+    Returns
+    -------
+    Kernel weight : double
+    '''
 
     cdef:
         matrix_2d_params *params = <matrix_2d_params*> kernel_params
         uint32_t index_x, index_y
         double x, y
 
-    x = distance * cos(bearing)
-    y = distance * sin(bearing)
+    # bearing is counted from North, but we want matrix
+    # kernels that have origin at lower left
+    x = distance * sin(bearing)
+    y = -distance * cos(bearing)
 
     index_x = <uint32_t> (
         # assume, refval_x is always zero! for speed

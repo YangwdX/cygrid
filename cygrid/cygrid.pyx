@@ -278,6 +278,8 @@ cdef class Cygrid(object):
             'gauss1d', (kernel_sigma,)
             'gauss2d', (kernel_sigma_maj, kernel_sigma_min, PA)
             'tapered_sinc', (kernel_sigma, param_a, param_b)
+            'vector1d', (kernel vector, refpix, dx)
+            'matrix2d', (kernel matrix, (refpix_x, refpix_y), (dx, dy))
 
         Except for param_a and param_b all numbers are in units of degrees.
         Param_a and Param_b should be 2.52 and 1.55, respectively, for optimal
@@ -287,17 +289,21 @@ cdef class Cygrid(object):
         applied to the data. If in doubt a good value is about 25%
         of the true/input angular resolution of the data (this will result
         in about 10% degradation of the final angular resolution.)
+
+        The 'vector1d' and 'matrix2d' can be used to define custom kernels,
+        but there are drawbacks:
+        - numerical accuracy could be affected because of discretization
+          (larger kernels and as such small dx (and dy) can be used for
+          improvement)
+        - for the matrix2d, a local tangential-plane projection has to be
+          utilized to perform the convolution; this can produce serious errors
+          due to projection curvature - make sure to utilize this method
+          only for small/flat images
         '''
 
         cdef:
             unicode kernel_type_u = ustring(kernel_type)
             unicode kernel_description
-            # double (*kernel_func_ptr)(double, double, double[::1]) nogil
-
-            # np.ndarray kernel_params_arr = np.atleast_1d(
-            #     kernel_params
-            #     ).astype(np.float64)
-            # double[::1] kernel_params = kernel_params_arr  # test if mem-view works
 
             int num_params
 
