@@ -40,8 +40,8 @@ env:
         # For this package-template, we include examples of Cython modules,
         # so Cython is required for testing. If your package does not include
         # Cython code, you can set CONDA_DEPENDENCIES=''
-        - CONDA_DEPENDENCIES='Cython pytest'
-        - CONDA_DEPENDENCIES_DOC='Cython sphinx-astropy pytest scipy astroquery reproject'
+        - CONDA_DEPENDENCIES='Cython pytest pytest-doctestplus'
+        - CONDA_DEPENDENCIES_DOC='Cython sphinx-astropy pytest scipy astroquery reproject pytest-doctestplus'
 
         # List other runtime dependencies for the package that are available as
         # pip packages here.
@@ -80,30 +80,48 @@ matrix:
 
     include:
 
+        # We have to make the releases based on rather old numpy version
+        # otherwise users will keep getting "incompatible API" errors
+        # (For more information on ABI problems with numpy see:
+        # https://stackoverflow.com/questions/17709641/valueerror-numpy-dtype-has-the-wrong-size-try-recompiling/18369312)
+        # for Windows we'll use 1.11, for Linux/MacOS 1.9 is used
+
         # Standard linux; also used for sdist'ing
         - os: linux
-          env: DO_DIST=YES
+          env:
+            - DO_DIST=YES
+            - NUMPY_VERSION=1.11
+            # - ASTROPY_VERSION=stable
+            - ASTROPY_VERSION=2.0.11  # need old astropy, for numpy 1.9
 
-        # MacOS X - clang
-        # not working, even though we added the necessary compiler flags
-        # - os: osx
-        #   osx_image: xcode8.3
-        #   env:
-        #     - LDFLAGS='-L/usr/local/opt/libomp/lib -Wl,-rpath,/usr/local/opt/libomp/lib -lomp'
-        #     - CPPFLAGS='-I/usr/local/opt/libomp/include -Xpreprocessor -stdlib=libc++'
-        #     - COMPILER='clang'
-
-        # MacOS X - LLVM
-        # compiles and builds, but tests often not running (seg-fault?)
+        # MacOS X - conda-clang, release
         - os: osx
           osx_image: xcode8.3
           env:
-            - CC='/usr/local/opt/llvm/bin/clang'
-            - CXX='/usr/local/opt/llvm/bin/clang++'
-            - CXX11='/usr/local/opt/llvm/bin/clang++'
-            - LDFLAGS='-L/usr/local/opt/llvm/lib -Wl,-rpath,/usr/local/opt/llvm/lib -lgomp'
-            - CPPFLAGS='-I/usr/local/opt/llvm/include -stdlib=libc++'
-            - COMPILER='llvm'
+            - DO_MAC_DIST=YES
+            - COMPILER='conda-clang'
+            - NUMPY_VERSION=1.11
+            - ASTROPY_VERSION=2.0.11
+
+        # MacOS X - conda-clang, release
+        - os: osx
+          osx_image: xcode8.3
+          env:
+            - PYTHON_VERSION=3.6
+            - DO_MAC_DIST=YES
+            - COMPILER='conda-clang'
+            - NUMPY_VERSION=1.11
+            - ASTROPY_VERSION=2.0.11
+
+        # MacOS X - conda-clang, release
+        - os: osx
+          osx_image: xcode8.3
+          env:
+            - PYTHON_VERSION=3.5
+            - DO_MAC_DIST=YES
+            - COMPILER='conda-clang'
+            - NUMPY_VERSION=1.11
+            - ASTROPY_VERSION=2.0.11
 
         # MacOS X - gcc
         - os: osx
@@ -111,31 +129,11 @@ matrix:
           env:
             - COMPILER='gcc'
 
-        # MacOS X - conda-clang
-        - os: osx
-          osx_image: xcode8.3
-          env:
-            - DO_MAC_DIST=YES
-            - COMPILER='conda-clang'
-
         # MacOS X - conda-gcc
         - os: osx
           osx_image: xcode8.3
           env:
             - COMPILER='conda-gcc'
-
-        # MacOS X - conda-llvm
-        # not working at all, the packages (see below) seem to not install
-        # a compiler
-        # - os: osx
-        #   osx_image: xcode8.3
-        #   env:
-        #     - CC='/Users/travis/miniconda/bin/clang'
-        #     - CXX='/Users/travis/miniconda/bin/clang++'
-        #     - CXX11='/Users/travis/miniconda/bin/clang++'
-        #     - LDFLAGS='-L/Users/travis/miniconda/lib -Wl,-rpath,/Users/travis/miniconda/lib -lgomp'
-        #     - CPPFLAGS='-I/Users/travis/miniconda/include -stdlib=libc++'
-        #     - COMPILER='conda-llvm'
 
         # Do a coverage test.
         - os: linux
@@ -148,38 +146,14 @@ matrix:
             - PYTHON_VERSION=3.6
             - SETUP_CMD='build_docs'
             - CONDA_DEPENDENCIES=$CONDA_DEPENDENCIES_DOC
-            - NUMPY_VERSION=1.14.3
-            - ASTROPY_VERSION=3.0.2
+            - NUMPY_VERSION=1.11
+            - ASTROPY_VERSION=2.0.11
             - UPLOAD_DOCS=YES
 
-        # Now try Astropy dev with the latest Python and LTS with Python 2.7 and 3.x.
+        # Now try Astropy dev with the latest Python
         - os: linux
           env: ASTROPY_VERSION=development
                EVENT_TYPE='pull_request push cron'
-
-        # No python 2.7 support anymore!
-        # - os: linux
-        #   env: PYTHON_VERSION=2.7 ASTROPY_VERSION=lts
-
-        # - os: linux
-        #   env: ASTROPY_VERSION=lts
-
-        # Try all python versions and Numpy versions. Since we can assume that
-        # the Numpy developers have taken care of testing Numpy with different
-        # versions of Python, we can vary Python and Numpy versions at the same
-        # time.
-
-        - os: linux
-          env: PYTHON_VERSION=3.5 NUMPY_VERSION=1.12
-        # - os: linux
-        #   env: PYTHON_VERSION=3.6 NUMPY_VERSION=1.13
-        # - os: linux
-        #   env: NUMPY_VERSION=1.14
-
-        # Try numpy pre-release
-        # - os: linux
-        #   env: NUMPY_VERSION=prerelease
-        #        EVENT_TYPE='pull_request push cron'
 
         # Do a PEP8 test with flake8
         - os: linux

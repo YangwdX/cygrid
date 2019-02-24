@@ -18,7 +18,7 @@ environment:
       # For this package-template, we include examples of Cython modules,
       # so Cython is required for testing. If your package does not include
       # Cython code, you can set CONDA_DEPENDENCIES: ""
-      CONDA_DEPENDENCIES: "Cython pytest twine"
+      CONDA_DEPENDENCIES: "Cython pytest pytest-doctestplus twine"
 
       # List other runtime dependencies for the package that are available as
       # pip packages here.
@@ -32,28 +32,37 @@ environment:
       CONDA_CHANNELS: "conda-forge"
 
   matrix:
-      # We test Python 2.7 for Python 2 support.
-      # Apparently not working on Windows
-      # - PYTHON_VERSION: "2.7"
-      #   ASTROPY_VERSION: "stable"
-      #   NUMPY_VERSION: "stable"
 
-      # We test Python 3.5 for Python 3 support.
+        # We have to make the releases based on rather old numpy version
+        # otherwise users will keep getting "incompatible API" errors
+        # (For more information on ABI problems with numpy see:
+        # https://stackoverflow.com/questions/17709641/valueerror-numpy-dtype-has-the-wrong-size-try-recompiling/18369312)
+        # for Windows we'll use 1.11, for Linux/MacOS 1.9 is used
+
+      - PYTHON_VERSION: "3.5"
+        ASTROPY_VERSION: "2.0.11"
+        NUMPY_VERSION: "1.11"
+        DO_RELEASE: "yes"
+
+      - PYTHON_VERSION: "3.6"
+        ASTROPY_VERSION: "2.0.11"
+        NUMPY_VERSION: "1.11"
+        DO_RELEASE: "yes"
+
+      - PYTHON_VERSION: "3.7"
+        ASTROPY_VERSION: "2.0.11"
+        NUMPY_VERSION: "1.11"
+        DO_RELEASE: "yes"
+
+      # try more recent numpy+astropy
+
       - PYTHON_VERSION: "3.5"
         ASTROPY_VERSION: "stable"
         NUMPY_VERSION: "stable"
 
-      # We test Python 3.7 for Python 3 support.
       - PYTHON_VERSION: "3.7"
         ASTROPY_VERSION: "stable"
         NUMPY_VERSION: "stable"
-
-      - PYTHON_VERSION: "3.6"
-        # ASTROPY_VERSION: "2.0"
-        # NUMPY_VERSION: "1.11"
-        ASTROPY_VERSION: "stable"
-        NUMPY_VERSION: "stable"
-        DO_RELEASE: "yes"
 
 platform:
     -x64

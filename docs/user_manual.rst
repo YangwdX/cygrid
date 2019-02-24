@@ -412,12 +412,14 @@ we will simply create a mock data set, with the help of a utility function,
     ...         )
 
     >>> np.set_printoptions(precision=4)
-    >>> print(lons)  # doctest: +FLOAT_CMP
-    [59.473  61.3992 56.8253 ... 59.957  57.5156 59.176 ]
-    >>> print(lats)  # doctest: +FLOAT_CMP
-    [28.0106 31.0641 30.3142 ... 28.5785 32.1307 28.8626]
-    >>> print(signal)  # doctest: +FLOAT_CMP
-    [ 0.0856  1.1899 -0.3375 ...  1.7997 -0.5739  0.0358]
+    >>> if np.__version__ >= '1.14':
+    ...     np.set_printoptions(legacy='1.13')
+    >>> print(lons)  # doctest: +FLOAT_CMP +NORMALIZE_WHITESPACE
+    [59.473  61.3992 56.8253 ..., 59.957  57.5156 59.176 ]
+    >>> print(lats)  # doctest: +FLOAT_CMP +NORMALIZE_WHITESPACE
+    [28.0106 31.0641 30.3142 ..., 28.5785 32.1307 28.8626]
+    >>> print(signal)  # doctest: +FLOAT_CMP +NORMALIZE_WHITESPACE
+    [ 0.0856  1.1899 -0.3375 ...,  1.7997 -0.5739  0.0358]
 
 .. note::
 
@@ -481,14 +483,14 @@ the `signal`)::
 The result can be queried using the `~cygrid.WcsGrid.get_data` method::
 
     >>> gridded_data = gridder.get_datacube()
-    >>> print(gridded_data)  # doctest: +FLOAT_CMP
-    [[[ 0.0519 -0.0529  0.0298 ...  0.0086  0.0492  0.1135]
-      [ 0.0456 -0.0954 -0.0979 ... -0.0122 -0.0485 -0.0387]
-      [ 0.0309 -0.0625 -0.0642 ... -0.0075 -0.0275 -0.038 ]
-      ...
-      [-0.0313 -0.0172 -0.0346 ... -0.008   0.117   0.0905]
-      [-0.1239 -0.0636 -0.0854 ... -0.0311  0.0787  0.0655]
-      [-0.0851 -0.0691 -0.0671 ...  0.1039  0.1192  0.0964]]]
+    >>> print(gridded_data)  # doctest: +FLOAT_CMP +NORMALIZE_WHITESPACE
+    [[[ 0.0519 -0.0529  0.0298 ...,  0.0086  0.0492  0.1135]
+      [ 0.0456 -0.0954 -0.0979 ..., -0.0122 -0.0485 -0.0387]
+      [ 0.0309 -0.0625 -0.0642 ..., -0.0075 -0.0275 -0.038 ]
+      ...,
+      [-0.0313 -0.0172 -0.0346 ..., -0.008   0.117   0.0905]
+      [-0.1239 -0.0636 -0.0854 ..., -0.0311  0.0787  0.0655]
+      [-0.0851 -0.0691 -0.0671 ...,  0.1039  0.1192  0.0964]]]
 
 As said above, this has three dimensions, but the third axis (the spectral
 axis) has length-1 and is not necessary in this case. We can get rid of it::
@@ -863,7 +865,7 @@ pairs to the constructor::
     >>> gridder.grid(lons, lats, signal[:, np.newaxis])
 
     >>> gridded_sightlines = gridder.get_datacube().squeeze()
-    >>> print(  # doctest: +FLOAT_CMP
+    >>> print(
     ...     'lon  lat  sightline-value\n',
     ...     '\n'.join(
     ...         '{:4.1f} {:4.1f} {:6.3f}'.format(*t)
